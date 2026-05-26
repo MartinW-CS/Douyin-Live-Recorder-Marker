@@ -18,3 +18,13 @@ enabled = true
 command = "biliup"
 config_path = "tmp/biliup.config.toml"
 output_dir = "recordings"
+
+[dycast]
+enabled = true
+command = []
+cwd = ""
+host = "127.0.0.1"
+port = 8765
+events_output = "tmp/events.jsonl"
+streamer = "example_streamer"
+skip_gift_repeats = true

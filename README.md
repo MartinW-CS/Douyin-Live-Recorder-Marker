@@ -44,6 +44,42 @@ biliup --config biliup.config.toml start
 
 需要先按 biliup 官方文档安装并确认本机可用。
 
+## 一条命令启动流水线
+
+在 `config.toml` 的 `[dycast]` 里填入本机启动 dycast 的命令，例如：
+
+```toml
+[dycast]
+enabled = true
+command = ["npm", "run", "dev"]
+cwd = "/path/to/dycast"
+host = "127.0.0.1"
+port = 8765
+events_output = "events.jsonl"
+streamer = "example_streamer"
+skip_gift_repeats = true
+```
+
+然后运行：
+
+```bash
+douyin-marker run-pipeline -c config.toml
+```
+
+这个命令会：
+
+- 生成 biliup 配置并启动 biliup。
+- 启动配置里的 dycast 命令。
+- 在 `ws://127.0.0.1:8765` 接收 dycast 转发消息。
+- 实时写入 `events.jsonl`。
+- 实时更新 `markers.json` 和 `markers.csv`。
+
+如果 dycast 需要手动在网页里输入直播间和转发地址，仍需在 dycast 界面里把转发地址填成：
+
+```text
+ws://127.0.0.1:8765
+```
+
 ## 采集弹幕/礼物事件
 
 启动本项目的 dycast 接收端：

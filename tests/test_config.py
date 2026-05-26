@@ -18,3 +18,24 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(config.streamers[0].name, "demo")
         self.assertEqual(config.marker.danmaku_window_seconds, 30)
+
+    def test_parse_dycast_config_command(self):
+        config = parse_config(
+            {
+                "streamers": [
+                    {
+                        "name": "demo",
+                        "url": "https://live.douyin.com/123",
+                    }
+                ],
+                "dycast": {
+                    "command": ["npm", "run", "dev"],
+                    "cwd": "/tmp/dycast",
+                    "port": 9000,
+                },
+            }
+        )
+
+        self.assertEqual(config.dycast.command, ["npm", "run", "dev"])
+        self.assertEqual(config.dycast.cwd, "/tmp/dycast")
+        self.assertEqual(config.dycast.port, 9000)

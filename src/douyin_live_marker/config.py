@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+import shlex
 import tomllib
 
 
@@ -34,10 +35,23 @@ class BiliupConfig:
 
 
 @dataclass(frozen=True)
+class DycastConfig:
+    enabled: bool = True
+    command: list[str] = field(default_factory=list)
+    cwd: str | None = None
+    host: str = "127.0.0.1"
+    port: int = 8765
+    events_output: str = "events.jsonl"
+    streamer: str | None = None
+    skip_gift_repeats: bool = True
+
+
+@dataclass(frozen=True)
 class AppConfig:
     streamers: list[StreamerConfig]
     marker: MarkerConfig = field(default_factory=MarkerConfig)
     biliup: BiliupConfig = field(default_factory=BiliupConfig)
+    dycast: DycastConfig = field(default_factory=DycastConfig)
 
 
 def load_config(path: str | Path) -> AppConfig:
@@ -81,8 +95,21 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         output_dir=str(biliup_raw.get("output_dir", "recordings")),
     )
 
+    dycast_raw = raw.get("dycast", {})
+    dycast = DycastConfig(
+        enabled=bool(dycast_raw.get("enabled", True)),
+        command=_parse_command(dycast_raw.get("command", [])),
+        cwd=_optional_str(dycast_raw.get("cwd")),
+        host=str(dycast_raw.get("host", "127.0.0.1")),
+        port=int(dycast_raw.get("port", 8765)),
+        events_output=str(dycast_raw.get("events_output", "events.jsonl")),
+        streamer=_optional_str(dycast_raw.get("streamer")),
+        skip_gift_repeats=bool(dycast_raw.get("skip_gift_repeats", True)),
+    )
+
     validate_marker_config(marker)
-    return AppConfig(streamers=streamers, marker=marker, biliup=biliup)
+    validate_dycast_config(dycast)
+    return AppConfig(streamers=streamers, marker=marker, biliup=biliup, dycast=dycast)
 
 
 def validate_marker_config(marker: MarkerConfig) -> None:
@@ -96,6 +123,32 @@ def validate_marker_config(marker: MarkerConfig) -> None:
         raise ValueError("gift_value_threshold cannot be negative")
     if marker.pre_buffer_seconds < 0 or marker.post_buffer_seconds < 0:
         raise ValueError("marker buffers cannot be negative")
+
+
+def validate_dycast_config(dycast: DycastConfig) -> None:
+    if not dycast.host:
+        raise ValueError("dycast host cannot be empty")
+    if dycast.port <= 0 or dycast.port > 65535:
+        raise ValueError("dycast port must be between 1 and 65535")
+    if not dycast.events_output:
+        raise ValueError("dycast events_output cannot be empty")
+
+
+def _parse_command(value: Any) -> list[str]:
+    if value is None or value == "":
+        return []
+    if isinstance(value, str):
+        return shlex.split(value)
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item)]
+    raise ValueError("command must be a string or list of strings")
+
+
+def _optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def sample_config() -> str:
@@ -120,4 +173,16 @@ enabled = true
 command = "biliup"
 config_path = "biliup.config.toml"
 output_dir = "recordings"
+
+[dycast]
+enabled = true
+# Fill this with the command that starts your local dycast checkout.
+# Example: command = ["npm", "run", "dev"]
+command = []
+cwd = ""
+host = "127.0.0.1"
+port = 8765
+events_output = "events.jsonl"
+streamer = "example_streamer"
+skip_gift_repeats = true
 """

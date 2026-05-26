@@ -12,6 +12,7 @@ from .collectors.dycast import collect_dycast_to_jsonl
 from .config import load_config, sample_config
 from .events import parse_timestamp
 from .io import follow_jsonl_events, read_jsonl_events, write_markers_csv, write_markers_json
+from .pipeline import PipelineOptions, parse_optional_started_at, run_pipeline
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -71,6 +72,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="keep repeated dycast gift messages instead of dropping repeatEnd != 0",
     )
     collect_dycast_parser.set_defaults(func=cmd_collect_dycast)
+
+    run_parser = subparsers.add_parser(
+        "run-pipeline",
+        help="start biliup, dycast, dycast event collection, and marker generation",
+    )
+    run_parser.add_argument("-c", "--config", default="config.toml")
+    run_parser.add_argument("--started-at", default="auto", help="ISO time or auto")
+    run_parser.add_argument("--events-output")
+    run_parser.add_argument("--json-output")
+    run_parser.add_argument("--csv-output")
+    run_parser.add_argument("--streamer")
+    run_parser.add_argument("--no-biliup", action="store_true")
+    run_parser.add_argument("--no-dycast", action="store_true")
+    run_parser.set_defaults(func=cmd_run_pipeline)
 
     return parser
 
@@ -160,6 +175,24 @@ def cmd_collect_dycast(args: argparse.Namespace) -> int:
                 skip_gift_repeats=not args.include_gift_repeats,
             )
         )
+    except KeyboardInterrupt:
+        print("stopped")
+    return 0
+
+
+def cmd_run_pipeline(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    options = PipelineOptions(
+        started_at=parse_optional_started_at(args.started_at),
+        events_output=args.events_output,
+        json_output=args.json_output,
+        csv_output=args.csv_output,
+        streamer=args.streamer,
+        start_biliup=not args.no_biliup,
+        start_dycast=not args.no_dycast,
+    )
+    try:
+        asyncio.run(run_pipeline(config, options))
     except KeyboardInterrupt:
         print("stopped")
     return 0
