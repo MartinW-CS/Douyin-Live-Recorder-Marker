@@ -1,5 +1,6 @@
 __pycache__/
 *.py[cod]
+*.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -9,3 +10,7 @@ recordings/
 biliup.config.toml
 markers.json
 markers.csv
+config.local.toml
+events.jsonl
+vendor/
+ds_update.log
