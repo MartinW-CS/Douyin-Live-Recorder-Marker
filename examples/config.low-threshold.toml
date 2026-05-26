@@ -1,0 +1,20 @@
+[[streamers]]
+name = "example_streamer"
+url = "https://live.douyin.com/000000000000"
+
+[marker]
+keywords = ["名场面", "来了", "抽奖"]
+danmaku_window_seconds = 30
+danmaku_threshold = 3
+danmaku_cooldown_seconds = 30
+gift_value_threshold = 1000
+pre_buffer_seconds = 15
+post_buffer_seconds = 45
+output_json = "tmp/markers.json"
+output_csv = "tmp/markers.csv"
+
+[biliup]
+enabled = true
+command = "biliup"
+config_path = "tmp/biliup.config.toml"
+output_dir = "recordings"

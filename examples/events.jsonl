@@ -1,0 +1,6 @@
+{"type":"danmaku","timestamp":"2026-05-25T20:00:05Z","streamer":"example_streamer","user":"u1","content":"开播了"}
+{"type":"danmaku","timestamp":"2026-05-25T20:00:10Z","streamer":"example_streamer","user":"u2","content":"名场面来了"}
+{"type":"gift","timestamp":"2026-05-25T20:00:30Z","streamer":"example_streamer","user":"u3","gift_name":"big gift","gift_value":3000}
+{"type":"danmaku","timestamp":"2026-05-25T20:01:01Z","streamer":"example_streamer","user":"u4","content":"msg 1"}
+{"type":"danmaku","timestamp":"2026-05-25T20:01:02Z","streamer":"example_streamer","user":"u5","content":"msg 2"}
+{"type":"danmaku","timestamp":"2026-05-25T20:01:03Z","streamer":"example_streamer","user":"u6","content":"msg 3"}
