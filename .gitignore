@@ -17,3 +17,4 @@ events.jsonl
 vendor/
 ds_update.log
 download.log
+.douyin-recorder-ui.json

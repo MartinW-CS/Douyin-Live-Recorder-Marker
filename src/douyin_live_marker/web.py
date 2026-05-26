@@ -6,15 +6,18 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 import asyncio
 import contextlib
+import html
 import json
 import re
-import mimetypes
+import ssl
 
 from aiohttp import web
 
 from .config import AppConfig, BiliupConfig, DycastConfig, MarkerConfig, StreamerConfig
 from .dycast_patch import ensure_dycast_auto_connect
 from .pipeline import PipelineOptions, run_pipeline
+
+SETTINGS_PATH = Path(".douyin-recorder-ui.json")
 
 
 class UiState:
@@ -33,6 +36,7 @@ def create_app() -> web.Application:
     app["state"] = state
     app.router.add_get("/", index)
     app.router.add_get("/api/status", status)
+    app.router.add_get("/api/settings", settings)
     app.router.add_post("/api/choose-dir", choose_dir)
     app.router.add_post("/api/start", start)
     app.router.add_post("/api/stop", stop)
@@ -54,12 +58,16 @@ async def run_ui(host: str, port: int) -> None:
 
 
 async def index(request: web.Request) -> web.Response:
-    return web.Response(text=INDEX_HTML, content_type="text/html")
+    return web.Response(text=render_index(load_ui_settings()), content_type="text/html")
 
 
 async def status(request: web.Request) -> web.Response:
     state: UiState = request.app["state"]
     return web.json_response(status_payload(state))
+
+
+async def settings(request: web.Request) -> web.Response:
+    return web.json_response({"ok": True, "settings": load_ui_settings()})
 
 
 async def choose_dir(request: web.Request) -> web.Response:
@@ -86,10 +94,11 @@ async def start(request: web.Request) -> web.Response:
 
     payload = await request.json()
     streamer = str(payload.get("streamer") or "").strip()
-    url = str(payload.get("url") or "").strip()
+    url = sanitize_douyin_url(str(payload.get("url") or ""))
     save_dir = str(payload.get("saveDir") or "").strip()
     if not streamer or not url or not save_dir:
         return web.json_response({"ok": False, "error": "streamer, url and saveDir are required"}, status=400)
+    save_ui_settings({"streamer": streamer, "url": url, "saveDir": save_dir})
 
     save_path = Path(save_dir).expanduser().resolve()
     save_path.mkdir(parents=True, exist_ok=True)
@@ -97,7 +106,20 @@ async def start(request: web.Request) -> web.Response:
     ensure_dycast_auto_connect(dycast_dir)
 
     relay_url = "ws://127.0.0.1:8765"
-    room = await asyncio.to_thread(extract_douyin_room, url)
+    try:
+        room = await asyncio.to_thread(extract_douyin_room, url)
+    except Exception as exc:
+        return web.json_response(
+            {
+                "ok": False,
+                "error": (
+                    "无法从抖音链接解析房间号。请确认链接可访问，"
+                    "或直接粘贴 live.douyin.com 的直播间链接。"
+                ),
+                "detail": str(exc),
+            },
+            status=400,
+        )
     if not re.fullmatch(r"[0-9]{8,12}", room):
         return web.json_response(
             {
@@ -180,8 +202,16 @@ def build_runtime_config(streamer: str, url: str, save_dir: Path, dycast_dir: Pa
     )
 
 
+def sanitize_douyin_url(value: str) -> str:
+    text = value.strip()
+    match = re.search(r"https?://\S+", text)
+    if not match:
+        return text
+    return match.group(0).rstrip("，,。.;；")
+
+
 def extract_douyin_room(url: str) -> str:
-    text = url.strip()
+    text = sanitize_douyin_url(url)
     direct = re.search(r"live\.douyin\.com/([0-9]{8,12})", text)
     if direct:
         return direct.group(1)
@@ -199,13 +229,43 @@ def extract_douyin_room(url: str) -> str:
                 )
             },
         )
-        with urlopen(request, timeout=10) as response:
+        context = ssl._create_unverified_context()
+        with urlopen(request, timeout=10, context=context) as response:
             final_url = response.geturl()
         final = re.search(r"live\.douyin\.com/([0-9]{8,12})", final_url)
         if final:
             return final.group(1)
         return final_url.rstrip("/").split("/")[-1].split("?")[0]
     return text
+
+
+def load_ui_settings() -> dict[str, str]:
+    if not SETTINGS_PATH.exists():
+        return {}
+    try:
+        raw = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {
+        "streamer": str(raw.get("streamer") or ""),
+        "url": str(raw.get("url") or ""),
+        "saveDir": str(raw.get("saveDir") or ""),
+    }
+
+
+def save_ui_settings(settings: dict[str, str]) -> None:
+    SETTINGS_PATH.write_text(
+        json.dumps(settings, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def render_index(settings: dict[str, str]) -> str:
+    return (
+        INDEX_HTML.replace("__STREAMER__", html.escape(settings.get("streamer", ""), quote=True))
+        .replace("__URL__", html.escape(settings.get("url", ""), quote=True))
+        .replace("__SAVE_DIR__", html.escape(settings.get("saveDir", ""), quote=True))
+    )
 
 
 def status_payload(state: UiState) -> dict[str, object]:
@@ -278,12 +338,12 @@ INDEX_HTML = """<!doctype html>
     <div class="layout">
       <form id="startForm">
         <label for="streamer">主播名字</label>
-        <input id="streamer" name="streamer" value="imxiaoxin" autocomplete="off" required />
+        <input id="streamer" name="streamer" value="__STREAMER__" autocomplete="off" required />
         <label for="url">直播 URL</label>
-        <input id="url" name="url" value="https://v.douyin.com/DgMXvZsq3mo/" required />
+        <input id="url" name="url" value="__URL__" required />
         <label for="saveDir">保存到电脑的位置</label>
         <div class="path-row">
-          <input id="saveDir" name="saveDir" value="recordings/imxiaoxin" required />
+          <input id="saveDir" name="saveDir" value="__SAVE_DIR__" required />
           <button class="secondary" id="chooseDirBtn" type="button">选择位置</button>
         </div>
         <div class="actions">
@@ -308,7 +368,23 @@ INDEX_HTML = """<!doctype html>
     const statusLabel = document.getElementById('statusLabel');
     const statusDetail = document.getElementById('statusDetail');
     const frame = document.getElementById('dycastFrame');
+    const streamerInput = document.getElementById('streamer');
+    const urlInput = document.getElementById('url');
     const saveDirInput = document.getElementById('saveDir');
+    function requestJson(method, url, data) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(method, url);
+        xhr.setRequestHeader('content-type', 'application/json');
+        xhr.onload = () => {
+          let body = {};
+          try { body = JSON.parse(xhr.responseText || '{}'); } catch (err) {}
+          resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body });
+        };
+        xhr.onerror = () => reject(new Error('Network request failed'));
+        xhr.send(data ? JSON.stringify(data) : undefined);
+      });
+    }
     function renderStatus(status, label, detail) {
       statusDot.className = `status-dot ${status || ''}`;
       statusLabel.textContent = label || '未知';
@@ -316,40 +392,33 @@ INDEX_HTML = """<!doctype html>
     }
     document.getElementById('chooseDirBtn').addEventListener('click', async () => {
       renderStatus('starting', '选择保存位置', '正在打开系统文件夹选择窗口。');
-      const res = await fetch('/api/choose-dir', { method: 'POST' });
-      const json = await res.json();
-      if (!res.ok || !json.ok) {
-        renderStatus('idle', '未启动', json.error || '已取消选择保存位置。');
+      const { ok, body } = await requestJson('POST', '/api/choose-dir');
+      if (!ok || !body.ok) {
+        renderStatus('idle', '未启动', body.error || '已取消选择保存位置。');
         return;
       }
-      saveDirInput.value = json.path;
-      renderStatus('idle', '保存位置已选择', json.path);
+      saveDirInput.value = body.path;
+      renderStatus('idle', '保存位置已选择', body.path);
     });
     form.addEventListener('submit', async ev => {
       ev.preventDefault();
       const data = Object.fromEntries(new FormData(form).entries());
       renderStatus('starting', '启动中', '正在启动 biliup、dycast 和高光标记器。');
-      const res = await fetch('/api/start', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      const json = await res.json();
-      if (!res.ok || !json.ok) {
-        renderStatus('error', '出错', json.error || '启动失败。');
+      const { ok, body } = await requestJson('POST', '/api/start', data);
+      if (!ok || !body.ok) {
+        renderStatus('error', '出错', body.error || '启动失败。');
         return;
       }
-      frame.src = json.dycastUrl;
+      frame.src = body.dycastUrl;
       renderStatus('recording', '录制中', '录制流水线已启动。请确认右侧 dycast 页面已连接直播间。');
     });
     document.getElementById('stopBtn').addEventListener('click', async () => {
-      await fetch('/api/stop', { method: 'POST' });
+      await requestJson('POST', '/api/stop');
       renderStatus('stopped', '已停止', '录制流水线已停止。');
     });
     setInterval(async () => {
-      const res = await fetch('/api/status');
-      const json = await res.json();
-      renderStatus(json.status, json.label, json.detail || json.message);
+      const { ok, body } = await requestJson('GET', '/api/status');
+      if (ok) renderStatus(body.status, body.label, body.detail || body.message);
     }, 1500);
   </script>
 </body>
