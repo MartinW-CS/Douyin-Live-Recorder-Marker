@@ -32,13 +32,7 @@ def write_biliup_config(config: AppConfig, path: str | Path | None = None) -> Pa
 
 
 def run_biliup(config: AppConfig, biliup_config_path: str | Path | None = None) -> int:
-    config_path = Path(biliup_config_path or config.biliup.config_path)
-    command = [
-        config.biliup.command,
-        "--config",
-        str(config_path),
-        "start",
-    ]
+    command = [config.biliup.command, *config.biliup.args]
     return subprocess.call(command)
 
 

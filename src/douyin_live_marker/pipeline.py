@@ -76,7 +76,9 @@ async def run_pipeline(config: AppConfig, options: PipelineOptions) -> None:
             f"listening for dycast on ws://{config.dycast.host}:{config.dycast.port}; "
             f"writing events to {events_output}"
         )
+        await ensure_processes_still_running(processes)
         async for event in collector.collect():
+            await ensure_processes_still_running(processes)
             append_event_jsonl(events_output, event)
             if event.timestamp < started_at:
                 continue
@@ -92,12 +94,7 @@ async def run_pipeline(config: AppConfig, options: PipelineOptions) -> None:
 
 
 def make_biliup_command(config: AppConfig, biliup_config_path: str | Path) -> list[str]:
-    return [
-        config.biliup.command,
-        "--config",
-        str(biliup_config_path),
-        "start",
-    ]
+    return [config.biliup.command, *config.biliup.args]
 
 
 async def start_process(
@@ -110,6 +107,20 @@ async def start_process(
     process = await asyncio.create_subprocess_exec(*command, cwd=cwd or None)
     print(f"started {name}: {' '.join(command)}")
     return ManagedProcess(name=name, process=process)
+
+
+async def ensure_processes_still_running(processes: list[ManagedProcess]) -> None:
+    await asyncio.sleep(0.2)
+    failed = [
+        managed
+        for managed in processes
+        if managed.process.returncode not in {None, 0}
+    ]
+    if failed:
+        details = ", ".join(
+            f"{managed.name} exited with {managed.process.returncode}" for managed in failed
+        )
+        raise RuntimeError(details)
 
 
 async def stop_processes(processes: list[ManagedProcess]) -> None:

@@ -16,13 +16,14 @@ class PipelineTests(unittest.TestCase):
                 ],
                 "biliup": {
                     "command": "biliup",
+                    "args": ["server", "--bind", "127.0.0.1"],
                 },
             }
         )
 
         self.assertEqual(
             make_biliup_command(config, "biliup.config.toml"),
-            ["biliup", "--config", "biliup.config.toml", "start"],
+            ["biliup", "server", "--bind", "127.0.0.1"],
         )
 
     def test_parse_optional_started_at_auto(self):

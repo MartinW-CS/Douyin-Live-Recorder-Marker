@@ -18,6 +18,7 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(config.streamers[0].name, "demo")
         self.assertEqual(config.marker.danmaku_window_seconds, 30)
+        self.assertEqual(config.biliup.args, ["server"])
 
     def test_parse_dycast_config_command(self):
         config = parse_config(

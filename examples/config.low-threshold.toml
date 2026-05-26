@@ -16,6 +16,7 @@ output_csv = "tmp/markers.csv"
 [biliup]
 enabled = true
 command = "biliup"
+args = ["server"]
 config_path = "tmp/biliup.config.toml"
 output_dir = "recordings"
 

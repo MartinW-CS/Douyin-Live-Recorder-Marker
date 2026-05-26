@@ -30,6 +30,7 @@ class MarkerConfig:
 class BiliupConfig:
     enabled: bool = True
     command: str = "biliup"
+    args: list[str] = field(default_factory=lambda: ["server"])
     config_path: str = "biliup.config.toml"
     output_dir: str = "recordings"
 
@@ -91,6 +92,7 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
     biliup = BiliupConfig(
         enabled=bool(biliup_raw.get("enabled", True)),
         command=str(biliup_raw.get("command", "biliup")),
+        args=_parse_command(biliup_raw.get("args", ["server"])),
         config_path=str(biliup_raw.get("config_path", "biliup.config.toml")),
         output_dir=str(biliup_raw.get("output_dir", "recordings")),
     )
@@ -171,6 +173,7 @@ output_csv = "markers.csv"
 [biliup]
 enabled = true
 command = "biliup"
+args = ["server"]
 config_path = "biliup.config.toml"
 output_dir = "recordings"
 

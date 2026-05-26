@@ -39,16 +39,23 @@ douyin-marker record -c config.toml
 `record` 会执行类似下面的命令：
 
 ```bash
-biliup --config biliup.config.toml start
+biliup server
 ```
 
-需要先按 biliup 官方文档安装并确认本机可用。
+需要先按 biliup 官方文档安装并确认本机可用。不同版本的 biliup 命令行不完全一致，可以在 `[biliup] args` 里调整实际启动参数。
 
 ## 一条命令启动流水线
 
 在 `config.toml` 的 `[dycast]` 里填入本机启动 dycast 的命令，例如：
 
 ```toml
+[biliup]
+enabled = true
+command = "biliup"
+args = ["server"]
+config_path = "biliup.config.toml"
+output_dir = "recordings"
+
 [dycast]
 enabled = true
 command = ["npm", "run", "dev"]
