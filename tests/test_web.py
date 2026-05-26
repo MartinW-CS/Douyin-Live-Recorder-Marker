@@ -13,6 +13,12 @@ class WebTests(unittest.TestCase):
     def test_extract_room_from_plain_room_number(self):
         self.assertEqual(extract_douyin_room("123456789"), "123456789")
 
+    def test_extract_room_from_reflow_url(self):
+        self.assertEqual(
+            extract_douyin_room("https://webcast.amemv.com/douyin/webcast/reflow/7644230925513018150?x=1"),
+            "7644230925513018150",
+        )
+
     def test_sanitize_douyin_share_text(self):
         self.assertEqual(
             sanitize_douyin_url("https://v.douyin.com/L52PfolswRs/ 9@5.com"),

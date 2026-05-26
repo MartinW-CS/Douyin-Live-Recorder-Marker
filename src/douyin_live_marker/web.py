@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 from urllib.parse import quote
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 import asyncio
 import contextlib
@@ -120,7 +121,7 @@ async def start(request: web.Request) -> web.Response:
             },
             status=400,
         )
-    if not re.fullmatch(r"[0-9]{8,12}", room):
+    if not re.fullmatch(r"[0-9]{8,20}", room):
         return web.json_response(
             {
                 "ok": False,
@@ -215,7 +216,10 @@ def extract_douyin_room(url: str) -> str:
     direct = re.search(r"live\.douyin\.com/([0-9]{8,12})", text)
     if direct:
         return direct.group(1)
-    if re.fullmatch(r"[0-9]{8,12}", text):
+    reflow = re.search(r"/douyin/webcast/reflow/([0-9]{8,20})", text)
+    if reflow:
+        return reflow.group(1)
+    if re.fullmatch(r"[0-9]{8,20}", text):
         return text
     if "live.douyin.com/" in text:
         return text.rstrip("/").split("/")[-1].split("?")[0]
@@ -230,11 +234,17 @@ def extract_douyin_room(url: str) -> str:
             },
         )
         context = ssl._create_unverified_context()
-        with urlopen(request, timeout=10, context=context) as response:
-            final_url = response.geturl()
+        try:
+            with urlopen(request, timeout=10, context=context) as response:
+                final_url = response.geturl()
+        except HTTPError as exc:
+            final_url = exc.url
         final = re.search(r"live\.douyin\.com/([0-9]{8,12})", final_url)
         if final:
             return final.group(1)
+        final_reflow = re.search(r"/douyin/webcast/reflow/([0-9]{8,20})", final_url)
+        if final_reflow:
+            return final_reflow.group(1)
         return final_url.rstrip("/").split("/")[-1].split("?")[0]
     return text
 
