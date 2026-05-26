@@ -110,7 +110,17 @@ http://127.0.0.1:8787/
 
 点击“启动自动录制”后，后端会启动一个共享 dycast 页面，并为每个主播启动独立的自动检测任务。任务会循环检测开播状态：开播就录制，下播或录制结束后自动停下并回到等待检测。dycast 房间号和转发地址会自动带入，不需要用户再手动输入。dycast 只接受 `live.douyin.com` 使用的短房间号；抖音分享页里的 `reflow` 长 `room_id` 不能直接给 dycast，本项目会尝试从分享页里提取 `webRid` 后再传给 dycast。
 
-每个主播的视频文件会写入自己保存目录下的 `recordings/` 文件夹。对应的 `events.jsonl`、`markers.json`、`markers.csv`、`markers.fcpxml` 和 `markers_premiere.csv` 也会写在同一个保存目录里，方便和视频一起导入剪辑软件。`events.jsonl`、`markers.json` 和 `markers.csv` 只表示弹幕/礼物采集与标记器在运行，不代表视频已经录制成功，最终以 `recordings/` 里是否生成视频文件为准。
+每个主播的视频文件会写入自己保存目录下的 `recordings/` 文件夹。保存目录里仍会保留总表 `events.jsonl`、`markers.json` 和 `markers.csv`；同时，程序会在 `recordings/` 里为最新录制出来的视频生成同名标记文件，例如：
+
+```text
+recordings/主播-2026-05-26T20_00_00.flv
+recordings/主播-2026-05-26T20_00_00.markers.json
+recordings/主播-2026-05-26T20_00_00.markers.csv
+recordings/主播-2026-05-26T20_00_00.markers.fcpxml
+recordings/主播-2026-05-26T20_00_00.premiere_markers.csv
+```
+
+`markers.fcpxml` 会引用同名视频文件，适合导入 Final Cut Pro；`premiere_markers.csv` 是给 Premiere 查看/导入标记用的时间码表。`events.jsonl`、`markers.json` 和 `markers.csv` 只表示弹幕/礼物采集与标记器在运行，不代表视频已经录制成功，最终以 `recordings/` 里是否生成视频文件为准。
 
 页面会记住上一次成功点击“启动自动录制”时填写的主播列表、直播 URL、保存位置和高光关键词。第一次打开且没有历史记录时，会默认显示一个空主播卡片，关键词使用默认值。
 

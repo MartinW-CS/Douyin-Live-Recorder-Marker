@@ -12,6 +12,7 @@ from .collectors.dycast import DycastWebSocketServerCollector
 from .config import AppConfig
 from .events import parse_timestamp
 from .io import append_event_jsonl, write_markers_csv, write_markers_json
+from .paired_exports import write_paired_marker_exports
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,7 @@ async def run_pipeline(config: AppConfig, options: PipelineOptions) -> None:
     events_output = resolve_output_path(options.save_dir, options.events_output or config.dycast.events_output)
     json_output = resolve_output_path(options.save_dir, options.json_output or config.marker.output_json)
     csv_output = resolve_output_path(options.save_dir, options.csv_output or config.marker.output_csv)
+    recordings_dir = resolve_output_path(options.save_dir, config.biliup.output_dir)
     streamer = options.streamer or config.dycast.streamer or config.streamers[0].name
 
     biliup_config_path = write_biliup_config(
@@ -93,7 +95,9 @@ async def run_pipeline(config: AppConfig, options: PipelineOptions) -> None:
             markers.extend(new_markers)
             write_markers_json(json_output, markers)
             write_markers_csv(csv_output, markers)
-            print(f"wrote {len(markers)} markers to {json_output} and {csv_output}")
+            paired_outputs = write_paired_marker_exports(recordings_dir, markers)
+            paired_note = f"; paired exports: {', '.join(str(path) for path in paired_outputs)}" if paired_outputs else ""
+            print(f"wrote {len(markers)} markers to {json_output} and {csv_output}{paired_note}")
     finally:
         await stop_processes(processes)
 
