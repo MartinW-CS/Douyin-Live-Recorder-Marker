@@ -60,6 +60,22 @@ douyin-marker watch -c config.toml -i events.jsonl --started-at 2026-05-25T20:00
 PYTHONPATH=src python3 -m douyin_live_marker.cli analyze -c examples/config.low-threshold.toml -i examples/events.jsonl --started-at 2026-05-25T20:00:00Z
 ```
 
+## 内置采集适配器
+
+当前内置了 dycast WebSocket 转发适配器。启动本项目的接收端：
+
+```bash
+douyin-marker collect-dycast --host 127.0.0.1 --port 8765 -o events.jsonl --streamer example_streamer
+```
+
+然后在 dycast 的转发地址里填写：
+
+```text
+ws://127.0.0.1:8765
+```
+
+dycast 转发的 `WebcastChatMessage` 会被转换成 `danmaku` 事件，`WebcastGiftMessage` 会被转换成 `gift` 事件并写入 `events.jsonl`。礼物默认会跳过 dycast 标记为重复的推送；如需保留，可加 `--include-gift-repeats`。
+
 输出标记包含：
 
 - `danmaku_spike`：指定窗口内弹幕数超过阈值。

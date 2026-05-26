@@ -42,6 +42,26 @@ def parse_event_line(line: str) -> LiveEvent | None:
     )
 
 
+def event_to_json_dict(event: LiveEvent) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "type": event.type,
+        "timestamp": event.timestamp.astimezone(timezone.utc).isoformat(),
+    }
+    if event.streamer:
+        payload["streamer"] = event.streamer
+    if event.user:
+        payload["user"] = event.user
+    if event.content:
+        payload["content"] = event.content
+    if event.gift_name:
+        payload["gift_name"] = event.gift_name
+    if event.gift_value:
+        payload["gift_value"] = event.gift_value
+    if event.raw is not None:
+        payload["raw"] = event.raw
+    return payload
+
+
 def parse_timestamp(value: Any) -> datetime:
     if value is None:
         raise ValueError("event timestamp is required")

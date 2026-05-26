@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import Iterable
 
-from .events import LiveEvent, parse_event_line
+from .events import LiveEvent, event_to_json_dict, parse_event_line
 from .markers import Marker
 
 
@@ -32,6 +32,13 @@ def follow_jsonl_events(path: str | Path, poll_seconds: float = 1.0) -> Iterable
             event = parse_event_line(line)
             if event is not None:
                 yield event
+
+
+def append_event_jsonl(path: str | Path, event: LiveEvent) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(event_to_json_dict(event), ensure_ascii=False) + "\n")
 
 
 def write_markers_json(path: str | Path, markers: list[Marker]) -> None:

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 
 from .analyzer import MarkerAnalyzer
 from .biliup import run_biliup, write_biliup_config
+from .collectors.dycast import collect_dycast_to_jsonl
 from .config import load_config, sample_config
 from .events import parse_timestamp
 from .io import follow_jsonl_events, read_jsonl_events, write_markers_csv, write_markers_json
@@ -54,6 +56,21 @@ def build_parser() -> argparse.ArgumentParser:
     watch_parser.add_argument("--csv-output")
     watch_parser.add_argument("--poll-seconds", type=float, default=1.0)
     watch_parser.set_defaults(func=cmd_watch)
+
+    collect_dycast_parser = subparsers.add_parser(
+        "collect-dycast",
+        help="receive dycast WebSocket forwarded messages and write JSONL events",
+    )
+    collect_dycast_parser.add_argument("--host", default="127.0.0.1")
+    collect_dycast_parser.add_argument("--port", type=int, default=8765)
+    collect_dycast_parser.add_argument("-o", "--output", default="events.jsonl")
+    collect_dycast_parser.add_argument("--streamer")
+    collect_dycast_parser.add_argument(
+        "--include-gift-repeats",
+        action="store_true",
+        help="keep repeated dycast gift messages instead of dropping repeatEnd != 0",
+    )
+    collect_dycast_parser.set_defaults(func=cmd_collect_dycast)
 
     return parser
 
@@ -123,6 +140,26 @@ def cmd_watch(args: argparse.Namespace) -> int:
             write_markers_json(json_output, markers)
             write_markers_csv(csv_output, markers)
             print(f"wrote {len(markers)} markers to {json_output} and {csv_output}")
+    except KeyboardInterrupt:
+        print("stopped")
+    return 0
+
+
+def cmd_collect_dycast(args: argparse.Namespace) -> int:
+    print(
+        f"listening for dycast messages on ws://{args.host}:{args.port}; "
+        f"writing events to {args.output}"
+    )
+    try:
+        asyncio.run(
+            collect_dycast_to_jsonl(
+                host=args.host,
+                port=args.port,
+                output=args.output,
+                streamer=args.streamer,
+                skip_gift_repeats=not args.include_gift_repeats,
+            )
+        )
     except KeyboardInterrupt:
         print("stopped")
     return 0
