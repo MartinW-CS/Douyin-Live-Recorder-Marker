@@ -1,6 +1,12 @@
-# 抖音直播录制与自动标记 MVP
+# 抖音直播录制高光标记工具
 
-这个项目采用“biliup 负责录制，外挂分析器负责标记”的结构。当前版本不改 biliup 源码，先提供一个稳定的本地标记流水线：读取 JSONL 弹幕/礼物事件，输出 `markers.json` 和 `markers.csv`。
+这个项目采用成熟开源项目组合的方式实现：
+
+- [biliup](https://github.com/biliup/biliup)：负责抖音直播录制到本地。
+- [dycast](https://github.com/skmcj/dycast)：负责抖音直播弹幕/礼物采集，并通过 WebSocket 转发。
+- 本项目：接收 dycast 转发事件，统一写入 `events.jsonl`，再根据弹幕密度、关键词、大礼物生成 `markers.json` 和 `markers.csv`。
+
+这样可以避免在本项目里直接维护抖音 WebSocket 签名、protobuf 解析等高变动逻辑，把主要精力放在录制时间轴和高光标记上。
 
 ## 安装
 
@@ -9,6 +15,11 @@ python3 -m venv .venv
 . .venv/bin/activate
 pip install -e .
 ```
+
+同时需要按各自官方说明安装并确认可运行：
+
+- biliup
+- dycast
 
 ## 生成配置
 
@@ -33,7 +44,23 @@ biliup --config biliup.config.toml start
 
 需要先按 biliup 官方文档安装并确认本机可用。
 
-## 分析弹幕/礼物事件
+## 采集弹幕/礼物事件
+
+启动本项目的 dycast 接收端：
+
+```bash
+douyin-marker collect-dycast --host 127.0.0.1 --port 8765 -o events.jsonl --streamer example_streamer
+```
+
+然后启动 dycast，连接抖音直播间，并把 dycast 的转发地址填写为：
+
+```text
+ws://127.0.0.1:8765
+```
+
+dycast 转发的 `WebcastChatMessage` 会被转换成 `danmaku` 事件，`WebcastGiftMessage` 会被转换成 `gift` 事件并写入 `events.jsonl`。礼物默认会跳过 dycast 标记为重复的推送；如需保留，可加 `--include-gift-repeats`。
+
+## 分析事件并生成标记
 
 事件输入使用 JSONL，每行一个事件：
 
@@ -60,22 +87,6 @@ douyin-marker watch -c config.toml -i events.jsonl --started-at 2026-05-25T20:00
 PYTHONPATH=src python3 -m douyin_live_marker.cli analyze -c examples/config.low-threshold.toml -i examples/events.jsonl --started-at 2026-05-25T20:00:00Z
 ```
 
-## 内置采集适配器
-
-当前内置了 dycast WebSocket 转发适配器。启动本项目的接收端：
-
-```bash
-douyin-marker collect-dycast --host 127.0.0.1 --port 8765 -o events.jsonl --streamer example_streamer
-```
-
-然后在 dycast 的转发地址里填写：
-
-```text
-ws://127.0.0.1:8765
-```
-
-dycast 转发的 `WebcastChatMessage` 会被转换成 `danmaku` 事件，`WebcastGiftMessage` 会被转换成 `gift` 事件并写入 `events.jsonl`。礼物默认会跳过 dycast 标记为重复的推送；如需保留，可加 `--include-gift-repeats`。
-
 输出标记包含：
 
 - `danmaku_spike`：指定窗口内弹幕数超过阈值。
@@ -86,4 +97,4 @@ dycast 转发的 `WebcastChatMessage` 会被转换成 `danmaku` 事件，`Webcas
 
 ## 后续接入点
 
-真实抖音弹幕/礼物采集层只需要持续写入同样格式的 JSONL 事件，标记分析逻辑无需修改。抖音接口可能变化，建议把采集层单独维护。
+如果后续 dycast 不再适合使用，可以新增其它采集适配器。只要新适配器持续写入同样格式的 JSONL 事件，标记分析逻辑无需修改。

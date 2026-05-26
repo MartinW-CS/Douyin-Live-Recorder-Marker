@@ -1,7 +1,7 @@
 [project]
 name = "douyin-live-marker"
 version = "0.1.0"
-description = "Local Douyin live recording helper with danmaku and gift marker generation."
+description = "Douyin live recording marker pipeline integrating biliup and dycast."
 requires-python = ">=3.12"
 dependencies = [
     "websockets>=12",
