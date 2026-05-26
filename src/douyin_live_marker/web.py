@@ -183,7 +183,7 @@ async def start(request: web.Request) -> web.Response:
         )
     dycast_url = (
         "http://127.0.0.1:5173/"
-        f"?auto=1&room={quote(room)}&relay={quote(relay_url)}"
+        f"?auto=1&room={quote(room)}&relay={quote(relay_url)}&relayDelay=6000"
     )
     recording_url = f"https://live.douyin.com/{room}"
     config = build_runtime_config(streamer, recording_url, save_path, dycast_dir, keywords, gift_value_threshold)
@@ -323,7 +323,7 @@ async def run_auto_job(state: UiState, job: AutoJob) -> None:
                 job.room_url = room_url
                 job.dycast_url = (
                     "http://127.0.0.1:5173/"
-                    f"?auto=1&room={quote(room)}&relay={quote(f'ws://127.0.0.1:{job.relay_port}')}"
+                    f"?auto=1&room={quote(room)}&relay={quote(f'ws://127.0.0.1:{job.relay_port}')}&relayDelay=6000"
                 )
                 config = build_runtime_config(
                     job.name,
@@ -699,6 +699,7 @@ INDEX_HTML = """<!doctype html>
       </div>
       <div class="toolbar">
         <button class="secondary" id="addStreamerBtn" type="button">添加主播</button>
+        <button class="secondary" id="startSingleBtn" type="button">单次录制</button>
         <button class="primary" id="startAutoBtn" type="button">启动自动录制</button>
         <button class="danger" id="stopBtn" type="button">停止全部</button>
       </div>
@@ -828,6 +829,18 @@ INDEX_HTML = """<!doctype html>
       summaryText.textContent = body.autoRunning ? '自动录制运行中' : (body.label || '未启动');
       summaryDot.className = `dot ${body.autoRunning ? 'recording' : body.status || ''}`;
       if (!body.jobs || !body.jobs.length) {
+        if (body.running || ['starting', 'recording', 'error', 'stopped'].includes(body.status)) {
+          statusList.innerHTML = `
+            <div class="job">
+              <div class="job-top">
+                <strong>单次录制</strong>
+                <span class="pill"><span class="dot ${body.status}"></span>${escapeHtml(body.label || body.status)}</span>
+              </div>
+              <div class="job-message">${escapeHtml(body.detail || body.message || '')}</div>
+              ${body.dycastUrl ? `<iframe src="${escapeAttr(body.dycastUrl)}" title="dycast"></iframe>` : ''}
+            </div>`;
+          return;
+        }
         statusList.innerHTML = '<div class="empty">启动后这里会显示每个主播的检测、录制和 dycast 连接状态。</div>';
         return;
       }
@@ -855,6 +868,23 @@ INDEX_HTML = """<!doctype html>
     }
 
     document.getElementById('addStreamerBtn').addEventListener('click', () => addStreamer());
+    document.getElementById('startSingleBtn').addEventListener('click', async () => {
+      const streamers = collectStreamers();
+      if (!streamers.length) {
+        alert('至少填写一个主播、直播 URL 和保存位置。');
+        return;
+      }
+      const first = streamers[0];
+      const { ok, body } = await requestJson('POST', '/api/start', {
+        streamer: first.name,
+        url: first.url,
+        saveDir: first.saveDir,
+        keywords: first.keywords,
+        giftValueThreshold: first.giftValueThreshold
+      });
+      if (!ok || !body.ok) alert(body.error || '启动失败');
+      await pollStatus();
+    });
     document.getElementById('startAutoBtn').addEventListener('click', async () => {
       const streamers = collectStreamers();
       if (!streamers.length) {

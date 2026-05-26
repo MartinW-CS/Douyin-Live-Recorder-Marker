@@ -40,7 +40,7 @@ class PipelineTests(unittest.TestCase):
 
         self.assertFalse(process_ended_pipeline(ManagedProcess("dycast", process)))
 
-    def test_nonzero_process_exit_ends_pipeline(self):
+    def test_non_biliup_exit_does_not_end_pipeline(self):
         process = type("Process", (), {"returncode": 1})()
 
-        self.assertTrue(process_ended_pipeline(ManagedProcess("dycast", process)))
+        self.assertFalse(process_ended_pipeline(ManagedProcess("dycast", process)))

@@ -138,7 +138,7 @@ async def ensure_processes_still_running(processes: list[ManagedProcess]) -> Non
 def process_ended_pipeline(managed: ManagedProcess) -> bool:
     if managed.process.returncode is None:
         return False
-    return managed.name == "biliup" or managed.process.returncode != 0
+    return managed.name == "biliup"
 
 
 async def stop_processes(processes: list[ManagedProcess]) -> None:
