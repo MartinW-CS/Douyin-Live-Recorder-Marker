@@ -24,6 +24,7 @@ SETTINGS_PATH = Path(".douyin-recorder-ui.json")
 class UiState:
     def __init__(self) -> None:
         self.task: asyncio.Task | None = None
+        self.readiness_task: asyncio.Task | None = None
         self.status = "idle"
         self.message = "Ready"
         self.config: AppConfig | None = None
@@ -144,6 +145,7 @@ async def start(request: web.Request) -> web.Response:
     state.options = options
     state.dycast_url = dycast_url
     state.task = asyncio.create_task(run_pipeline_with_state(state, config, options))
+    state.readiness_task = asyncio.create_task(mark_recording_when_ready(state))
     return web.json_response({"ok": True, "dycastUrl": dycast_url})
 
 
@@ -153,6 +155,10 @@ async def stop(request: web.Request) -> web.Response:
         state.task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await state.task
+    if state.readiness_task is not None and not state.readiness_task.done():
+        state.readiness_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await state.readiness_task
     state.status = "stopped"
     state.message = "Stopped"
     return web.json_response({"ok": True})
@@ -160,8 +166,6 @@ async def stop(request: web.Request) -> web.Response:
 
 async def run_pipeline_with_state(state: UiState, config: AppConfig, options: PipelineOptions) -> None:
     try:
-        state.status = "recording"
-        state.message = "Recording pipeline is running"
         await run_pipeline(config, options)
     except asyncio.CancelledError:
         state.status = "stopped"
@@ -173,6 +177,36 @@ async def run_pipeline_with_state(state: UiState, config: AppConfig, options: Pi
     else:
         state.status = "stopped"
         state.message = "Stopped"
+
+
+async def mark_recording_when_ready(state: UiState) -> None:
+    try:
+        for _ in range(60):
+            if state.task is None or state.task.done():
+                return
+            dycast_ready = await can_connect("127.0.0.1", 5173)
+            biliup_ready = await can_connect("127.0.0.1", 19159)
+            if dycast_ready and biliup_ready:
+                state.status = "recording"
+                state.message = "Recording pipeline is running"
+                return
+            await asyncio.sleep(0.5)
+        if state.status == "starting":
+            state.message = "Still waiting for biliup and dycast to become ready"
+    except asyncio.CancelledError:
+        raise
+
+
+async def can_connect(host: str, port: int) -> bool:
+    try:
+        reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=0.3)
+    except OSError:
+        return False
+    except TimeoutError:
+        return False
+    writer.close()
+    await writer.wait_closed()
+    return True
 
 
 def build_runtime_config(streamer: str, url: str, save_dir: Path, dycast_dir: Path) -> AppConfig:
@@ -290,7 +324,7 @@ def status_payload(state: UiState) -> dict[str, object]:
     }
     detail_map = {
         "idle": "还没有启动录制。填写信息后点击“启动录制”。",
-        "starting": "正在启动 biliup、dycast 和高光标记器。",
+        "starting": "正在启动 biliup、dycast 和高光标记器。右侧页面可能需要几秒钟才能加载。",
         "recording": "录制流水线正在运行。请确认右侧 dycast 页面已连接直播间。",
         "running": "录制流水线正在运行。请确认右侧 dycast 页面已连接直播间。",
         "stopped": "录制流水线已停止。",
@@ -400,6 +434,14 @@ INDEX_HTML = """<!doctype html>
       statusLabel.textContent = label || '未知';
       statusDetail.textContent = detail || '';
     }
+    function syncFrame(body) {
+      if (body.status === 'recording' && body.dycastUrl && frame.src !== body.dycastUrl) {
+        frame.src = body.dycastUrl;
+      }
+      if (['idle', 'stopped', 'error'].includes(body.status)) {
+        frame.removeAttribute('src');
+      }
+    }
     document.getElementById('chooseDirBtn').addEventListener('click', async () => {
       renderStatus('starting', '选择保存位置', '正在打开系统文件夹选择窗口。');
       const { ok, body } = await requestJson('POST', '/api/choose-dir');
@@ -414,21 +456,25 @@ INDEX_HTML = """<!doctype html>
       ev.preventDefault();
       const data = Object.fromEntries(new FormData(form).entries());
       renderStatus('starting', '启动中', '正在启动 biliup、dycast 和高光标记器。');
+      frame.removeAttribute('src');
       const { ok, body } = await requestJson('POST', '/api/start', data);
       if (!ok || !body.ok) {
         renderStatus('error', '出错', body.error || '启动失败。');
         return;
       }
-      frame.src = body.dycastUrl;
-      renderStatus('recording', '录制中', '录制流水线已启动。请确认右侧 dycast 页面已连接直播间。');
+      renderStatus('starting', '启动中', '正在启动 biliup、dycast 和高光标记器。右侧页面可能需要几秒钟才能加载。');
     });
     document.getElementById('stopBtn').addEventListener('click', async () => {
       await requestJson('POST', '/api/stop');
+      frame.removeAttribute('src');
       renderStatus('stopped', '已停止', '录制流水线已停止。');
     });
     setInterval(async () => {
       const { ok, body } = await requestJson('GET', '/api/status');
-      if (ok) renderStatus(body.status, body.label, body.detail || body.message);
+      if (ok) {
+        renderStatus(body.status, body.label, body.detail || body.message);
+        syncFrame(body);
+      }
     }, 1500);
   </script>
 </body>
