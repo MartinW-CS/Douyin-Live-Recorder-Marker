@@ -87,6 +87,28 @@ douyin-marker run-pipeline -c config.toml
 ws://127.0.0.1:8765
 ```
 
+## 本地 Web UI
+
+也可以启动本项目自己的控制台页面：
+
+```bash
+douyin-marker ui
+```
+
+然后打开：
+
+```text
+http://127.0.0.1:8787/
+```
+
+页面里填写：
+
+- 主播名字
+- 抖音直播 URL
+- 保存到电脑的位置
+
+点击“启动录制”后，后端会启动 biliup、dycast 和高光标记器。页面会自动打开带参数的 dycast，不需要再手动输入 dycast 的房间号和转发地址。dycast 只接受房间号，本项目会尝试把 `https://live.douyin.com/...` 或 `https://v.douyin.com/...` 解析成房间号。
+
 ## 采集弹幕/礼物事件
 
 启动本项目的 dycast 接收端：

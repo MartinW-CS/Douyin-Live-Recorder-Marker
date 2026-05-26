@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Douyin live recording marker pipeline integrating biliup and dycast."
 requires-python = ">=3.12"
 dependencies = [
+    "aiohttp>=3.9.5",
     "websockets>=12",
 ]
 

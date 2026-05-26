@@ -21,6 +21,8 @@ class PipelineOptions:
     json_output: str | None = None
     csv_output: str | None = None
     streamer: str | None = None
+    room_url: str | None = None
+    save_dir: str | None = None
     start_biliup: bool = True
     start_dycast: bool = True
 
@@ -33,12 +35,15 @@ class ManagedProcess:
 
 async def run_pipeline(config: AppConfig, options: PipelineOptions) -> None:
     started_at = options.started_at or datetime.now(timezone.utc)
-    events_output = options.events_output or config.dycast.events_output
-    json_output = options.json_output or config.marker.output_json
-    csv_output = options.csv_output or config.marker.output_csv
+    events_output = resolve_output_path(options.save_dir, options.events_output or config.dycast.events_output)
+    json_output = resolve_output_path(options.save_dir, options.json_output or config.marker.output_json)
+    csv_output = resolve_output_path(options.save_dir, options.csv_output or config.marker.output_csv)
     streamer = options.streamer or config.dycast.streamer or config.streamers[0].name
 
-    biliup_config_path = write_biliup_config(config)
+    biliup_config_path = write_biliup_config(
+        config,
+        resolve_output_path(options.save_dir, config.biliup.config_path),
+    )
     metadata_path = write_pipeline_metadata(config, biliup_config_path, started_at, events_output)
     print(f"recording start time: {started_at.isoformat()}")
     print(f"wrote pipeline metadata to {metadata_path}")
@@ -95,6 +100,13 @@ async def run_pipeline(config: AppConfig, options: PipelineOptions) -> None:
 
 def make_biliup_command(config: AppConfig, biliup_config_path: str | Path) -> list[str]:
     return [config.biliup.command, *config.biliup.args]
+
+
+def resolve_output_path(save_dir: str | None, path: str | Path) -> str:
+    output_path = Path(path)
+    if output_path.is_absolute() or not save_dir:
+        return str(output_path)
+    return str(Path(save_dir) / output_path)
 
 
 async def start_process(

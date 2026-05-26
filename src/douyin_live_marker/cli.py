@@ -13,6 +13,7 @@ from .config import load_config, sample_config
 from .events import parse_timestamp
 from .io import follow_jsonl_events, read_jsonl_events, write_markers_csv, write_markers_json
 from .pipeline import PipelineOptions, parse_optional_started_at, run_pipeline
+from .web import run_ui
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -86,6 +87,11 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--no-biliup", action="store_true")
     run_parser.add_argument("--no-dycast", action="store_true")
     run_parser.set_defaults(func=cmd_run_pipeline)
+
+    ui_parser = subparsers.add_parser("ui", help="start the local web UI")
+    ui_parser.add_argument("--host", default="127.0.0.1")
+    ui_parser.add_argument("--port", type=int, default=8787)
+    ui_parser.set_defaults(func=cmd_ui)
 
     return parser
 
@@ -193,6 +199,14 @@ def cmd_run_pipeline(args: argparse.Namespace) -> int:
     )
     try:
         asyncio.run(run_pipeline(config, options))
+    except KeyboardInterrupt:
+        print("stopped")
+    return 0
+
+
+def cmd_ui(args: argparse.Namespace) -> int:
+    try:
+        asyncio.run(run_ui(args.host, args.port))
     except KeyboardInterrupt:
         print("stopped")
     return 0

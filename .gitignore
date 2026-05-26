@@ -1,4 +1,5 @@
 __pycache__/
+.DS_Store
 *.py[cod]
 *.egg-info/
 .pytest_cache/
@@ -7,6 +8,7 @@ __pycache__/
 .venv/
 tmp/
 recordings/
+data/
 biliup.config.toml
 markers.json
 markers.csv
@@ -14,3 +16,4 @@ config.local.toml
 events.jsonl
 vendor/
 ds_update.log
+download.log
