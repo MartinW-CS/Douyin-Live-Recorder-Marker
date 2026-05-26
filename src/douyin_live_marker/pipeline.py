@@ -123,16 +123,18 @@ async def start_process(
 
 async def ensure_processes_still_running(processes: list[ManagedProcess]) -> None:
     await asyncio.sleep(0.2)
-    failed = [
-        managed
-        for managed in processes
-        if managed.process.returncode not in {None, 0}
-    ]
+    failed = [managed for managed in processes if process_ended_pipeline(managed)]
     if failed:
         details = ", ".join(
             f"{managed.name} exited with {managed.process.returncode}" for managed in failed
         )
         raise RuntimeError(details)
+
+
+def process_ended_pipeline(managed: ManagedProcess) -> bool:
+    if managed.process.returncode is None:
+        return False
+    return managed.name == "biliup" or managed.process.returncode != 0
 
 
 async def stop_processes(processes: list[ManagedProcess]) -> None:

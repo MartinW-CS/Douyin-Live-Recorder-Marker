@@ -8,6 +8,7 @@ from douyin_live_marker.web import (
     extract_web_rid,
     load_ui_settings,
     parse_keywords,
+    parse_streamer_entries,
     render_index,
     sanitize_douyin_url,
     status_payload,
@@ -54,6 +55,17 @@ class WebTests(unittest.TestCase):
     def test_parse_keywords_splits_and_deduplicates(self):
         self.assertEqual(parse_keywords("高能,来了\n抽奖  高能，名场面"), ["高能", "来了", "抽奖", "名场面"])
 
+    def test_parse_streamer_entries_keeps_complete_rows(self):
+        self.assertEqual(
+            parse_streamer_entries(
+                [
+                    {"name": "a", "url": "https://live.douyin.com/123456789", "saveDir": "/tmp/a", "keywords": "高能"},
+                    {"name": "", "url": "https://live.douyin.com/1", "saveDir": "/tmp/b"},
+                ]
+            ),
+            [{"name": "a", "url": "https://live.douyin.com/123456789", "saveDir": "/tmp/a", "keywords": "高能"}],
+        )
+
     def test_recorder_safe_filename_removes_path_separators(self):
         self.assertEqual(safe_filename('主播/标题:测试?'), "主播_标题_测试_")
 
@@ -84,7 +96,7 @@ class WebTests(unittest.TestCase):
             }
         )
 
-        self.assertIn('value="主播"', html)
-        self.assertIn('value="https://live.douyin.com/123456789"', html)
-        self.assertIn('value="/tmp/live"', html)
+        self.assertIn('"streamer": "主播"', html)
+        self.assertIn('"url": "https://live.douyin.com/123456789"', html)
+        self.assertIn('"saveDir": "/tmp/live"', html)
         self.assertIn("高能，抽奖", html)
