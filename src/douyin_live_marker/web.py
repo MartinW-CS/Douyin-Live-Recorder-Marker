@@ -99,9 +99,11 @@ async def start(request: web.Request) -> web.Response:
     streamer = str(payload.get("streamer") or "").strip()
     url = sanitize_douyin_url(str(payload.get("url") or ""))
     save_dir = str(payload.get("saveDir") or "").strip()
+    keywords_text = str(payload.get("keywords") or "")
+    keywords = parse_keywords(keywords_text)
     if not streamer or not url or not save_dir:
         return web.json_response({"ok": False, "error": "streamer, url and saveDir are required"}, status=400)
-    save_ui_settings({"streamer": streamer, "url": url, "saveDir": save_dir})
+    save_ui_settings({"streamer": streamer, "url": url, "saveDir": save_dir, "keywords": keywords_text})
 
     save_path = Path(save_dir).expanduser().resolve()
     save_path.mkdir(parents=True, exist_ok=True)
@@ -137,7 +139,7 @@ async def start(request: web.Request) -> web.Response:
         f"?auto=1&room={quote(room)}&relay={quote(relay_url)}"
     )
     recording_url = f"https://live.douyin.com/{room}"
-    config = build_runtime_config(streamer, recording_url, save_path, dycast_dir)
+    config = build_runtime_config(streamer, recording_url, save_path, dycast_dir, keywords)
     options = PipelineOptions(
         streamer=streamer,
         save_dir=str(save_path),
@@ -212,11 +214,17 @@ async def can_connect(host: str, port: int) -> bool:
     return True
 
 
-def build_runtime_config(streamer: str, url: str, save_dir: Path, dycast_dir: Path) -> AppConfig:
+def build_runtime_config(
+    streamer: str,
+    url: str,
+    save_dir: Path,
+    dycast_dir: Path,
+    keywords: list[str] | None = None,
+) -> AppConfig:
     return AppConfig(
         streamers=[StreamerConfig(name=streamer, url=url)],
         marker=MarkerConfig(
-            keywords=["名场面", "来了", "抽奖"],
+            keywords=keywords if keywords is not None else default_keywords(),
             output_json=str(save_dir / "markers.json"),
             output_csv=str(save_dir / "markers.csv"),
         ),
@@ -247,6 +255,22 @@ def build_runtime_config(streamer: str, url: str, save_dir: Path, dycast_dir: Pa
             skip_gift_repeats=True,
         ),
     )
+
+
+def default_keywords() -> list[str]:
+    return ["名场面", "来了", "抽奖"]
+
+
+def parse_keywords(value: str) -> list[str]:
+    keywords: list[str] = []
+    seen = set()
+    for item in re.split(r"[\s,，、;；]+", value):
+        keyword = item.strip()
+        if not keyword or keyword in seen:
+            continue
+        seen.add(keyword)
+        keywords.append(keyword)
+    return keywords
 
 
 def sanitize_douyin_url(value: str) -> str:
@@ -331,6 +355,7 @@ def load_ui_settings() -> dict[str, str]:
         "streamer": str(raw.get("streamer") or ""),
         "url": str(raw.get("url") or ""),
         "saveDir": str(raw.get("saveDir") or ""),
+        "keywords": str(raw.get("keywords") or ""),
     }
 
 
@@ -346,6 +371,7 @@ def render_index(settings: dict[str, str]) -> str:
         INDEX_HTML.replace("__STREAMER__", html.escape(settings.get("streamer", ""), quote=True))
         .replace("__URL__", html.escape(settings.get("url", ""), quote=True))
         .replace("__SAVE_DIR__", html.escape(settings.get("saveDir", ""), quote=True))
+        .replace("__KEYWORDS__", html.escape(settings.get("keywords") or "，".join(default_keywords())))
     )
 
 
@@ -393,7 +419,8 @@ INDEX_HTML = """<!doctype html>
     .layout { display: grid; grid-template-columns: 360px 1fr; gap: 20px; align-items: start; }
     form, .panel { background: #fff; border: 1px solid #d7dde4; border-radius: 8px; padding: 18px; }
     label { display: block; font-size: 13px; color: #526070; margin: 14px 0 6px; }
-    input { width: 100%; box-sizing: border-box; border: 1px solid #bac4cf; border-radius: 6px; padding: 10px 11px; font-size: 14px; }
+    input, textarea { width: 100%; box-sizing: border-box; border: 1px solid #bac4cf; border-radius: 6px; padding: 10px 11px; font-size: 14px; font-family: inherit; }
+    textarea { min-height: 72px; resize: vertical; line-height: 1.45; }
     button { border: 0; border-radius: 6px; padding: 10px 14px; font-size: 14px; cursor: pointer; }
     .primary { background: #1769aa; color: #fff; }
     .secondary { background: #e8edf2; color: #26323f; }
@@ -427,6 +454,9 @@ INDEX_HTML = """<!doctype html>
           <input id="saveDir" name="saveDir" value="__SAVE_DIR__" required />
           <button class="secondary" id="chooseDirBtn" type="button">选择位置</button>
         </div>
+        <label for="keywords">高光关键词</label>
+        <textarea id="keywords" name="keywords" placeholder="例如：名场面，来了，抽奖">__KEYWORDS__</textarea>
+        <p class="hint">多个关键词可以用空格、逗号或换行分隔。弹幕命中任意关键词就会生成标记。</p>
         <div class="actions">
           <button class="primary" type="submit">启动录制</button>
           <button class="secondary" id="stopBtn" type="button">停止</button>

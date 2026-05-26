@@ -7,6 +7,7 @@ from douyin_live_marker.web import (
     extract_douyin_room,
     extract_web_rid,
     load_ui_settings,
+    parse_keywords,
     render_index,
     sanitize_douyin_url,
     status_payload,
@@ -39,6 +40,20 @@ class WebTests(unittest.TestCase):
         self.assertIn("douyin_live_marker.biliup_recorder", config.biliup.args)
         self.assertIn("/tmp/out/recordings", config.biliup.args)
 
+    def test_runtime_config_uses_custom_keywords(self):
+        config = build_runtime_config(
+            "demo",
+            "https://live.douyin.com/123456789",
+            Path("/tmp/out"),
+            Path("/tmp/dycast"),
+            ["高能", "来了"],
+        )
+
+        self.assertEqual(config.marker.keywords, ["高能", "来了"])
+
+    def test_parse_keywords_splits_and_deduplicates(self):
+        self.assertEqual(parse_keywords("高能,来了\n抽奖  高能，名场面"), ["高能", "来了", "抽奖", "名场面"])
+
     def test_recorder_safe_filename_removes_path_separators(self):
         self.assertEqual(safe_filename('主播/标题:测试?'), "主播_标题_测试_")
 
@@ -65,9 +80,11 @@ class WebTests(unittest.TestCase):
                 "streamer": "主播",
                 "url": "https://live.douyin.com/123456789",
                 "saveDir": "/tmp/live",
+                "keywords": "高能，抽奖",
             }
         )
 
         self.assertIn('value="主播"', html)
         self.assertIn('value="https://live.douyin.com/123456789"', html)
         self.assertIn('value="/tmp/live"', html)
+        self.assertIn("高能，抽奖", html)
