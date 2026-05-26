@@ -52,6 +52,18 @@ class WebTests(unittest.TestCase):
 
         self.assertEqual(config.marker.keywords, ["高能", "来了"])
 
+    def test_runtime_config_uses_custom_gift_threshold(self):
+        config = build_runtime_config(
+            "demo",
+            "https://live.douyin.com/123456789",
+            Path("/tmp/out"),
+            Path("/tmp/dycast"),
+            ["高能"],
+            gift_value_threshold=3000,
+        )
+
+        self.assertEqual(config.marker.gift_value_threshold, 3000)
+
     def test_parse_keywords_splits_and_deduplicates(self):
         self.assertEqual(parse_keywords("高能,来了\n抽奖  高能，名场面"), ["高能", "来了", "抽奖", "名场面"])
 
@@ -59,11 +71,25 @@ class WebTests(unittest.TestCase):
         self.assertEqual(
             parse_streamer_entries(
                 [
-                    {"name": "a", "url": "https://live.douyin.com/123456789", "saveDir": "/tmp/a", "keywords": "高能"},
+                    {
+                        "name": "a",
+                        "url": "https://live.douyin.com/123456789",
+                        "saveDir": "/tmp/a",
+                        "keywords": "高能",
+                        "giftValueThreshold": "3000",
+                    },
                     {"name": "", "url": "https://live.douyin.com/1", "saveDir": "/tmp/b"},
                 ]
             ),
-            [{"name": "a", "url": "https://live.douyin.com/123456789", "saveDir": "/tmp/a", "keywords": "高能"}],
+            [
+                {
+                    "name": "a",
+                    "url": "https://live.douyin.com/123456789",
+                    "saveDir": "/tmp/a",
+                    "keywords": "高能",
+                    "giftValueThreshold": "3000",
+                }
+            ],
         )
 
     def test_recorder_safe_filename_removes_path_separators(self):
@@ -93,6 +119,7 @@ class WebTests(unittest.TestCase):
                 "url": "https://live.douyin.com/123456789",
                 "saveDir": "/tmp/live",
                 "keywords": "高能，抽奖",
+                "giftValueThreshold": 3000,
             }
         )
 
@@ -100,3 +127,4 @@ class WebTests(unittest.TestCase):
         self.assertIn('"url": "https://live.douyin.com/123456789"', html)
         self.assertIn('"saveDir": "/tmp/live"', html)
         self.assertIn("高能，抽奖", html)
+        self.assertIn('"giftValueThreshold": 3000', html)

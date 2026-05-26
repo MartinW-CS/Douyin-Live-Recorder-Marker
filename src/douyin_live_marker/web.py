@@ -44,6 +44,7 @@ class AutoJob:
     url: str
     save_dir: str
     keywords_text: str
+    gift_value_threshold: int
     relay_port: int
     status: str = "idle"
     message: str = "未启动"
@@ -58,6 +59,7 @@ class AutoJob:
             "url": self.url,
             "saveDir": self.save_dir,
             "keywords": self.keywords_text,
+            "giftValueThreshold": self.gift_value_threshold,
             "relayPort": self.relay_port,
             "status": self.status,
             "label": auto_status_label(self.status),
@@ -137,9 +139,18 @@ async def start(request: web.Request) -> web.Response:
     save_dir = str(payload.get("saveDir") or "").strip()
     keywords_text = str(payload.get("keywords") or "")
     keywords = parse_keywords(keywords_text)
+    gift_value_threshold = parse_gift_value_threshold(payload.get("giftValueThreshold"))
     if not streamer or not url or not save_dir:
         return web.json_response({"ok": False, "error": "streamer, url and saveDir are required"}, status=400)
-    save_ui_settings({"streamer": streamer, "url": url, "saveDir": save_dir, "keywords": keywords_text})
+    save_ui_settings(
+        {
+            "streamer": streamer,
+            "url": url,
+            "saveDir": save_dir,
+            "keywords": keywords_text,
+            "giftValueThreshold": gift_value_threshold,
+        }
+    )
 
     save_path = Path(save_dir).expanduser().resolve()
     save_path.mkdir(parents=True, exist_ok=True)
@@ -175,7 +186,7 @@ async def start(request: web.Request) -> web.Response:
         f"?auto=1&room={quote(room)}&relay={quote(relay_url)}"
     )
     recording_url = f"https://live.douyin.com/{room}"
-    config = build_runtime_config(streamer, recording_url, save_path, dycast_dir, keywords)
+    config = build_runtime_config(streamer, recording_url, save_path, dycast_dir, keywords, gift_value_threshold)
     options = PipelineOptions(
         streamer=streamer,
         save_dir=str(save_path),
@@ -218,6 +229,7 @@ async def start_auto(request: web.Request) -> web.Response:
             url=entry["url"],
             save_dir=entry["saveDir"],
             keywords_text=entry["keywords"],
+            gift_value_threshold=int(entry["giftValueThreshold"]),
             relay_port=8765 + index,
         )
         state.jobs[job.id] = job
@@ -319,6 +331,7 @@ async def run_auto_job(state: UiState, job: AutoJob) -> None:
                     save_path,
                     Path("vendor/dycast"),
                     parse_keywords(job.keywords_text),
+                    job.gift_value_threshold,
                     dycast_port=job.relay_port,
                     dycast_enabled=True,
                 )
@@ -382,6 +395,7 @@ def build_runtime_config(
     save_dir: Path,
     dycast_dir: Path,
     keywords: list[str] | None = None,
+    gift_value_threshold: int = 1000,
     dycast_port: int = 8765,
     dycast_enabled: bool = True,
 ) -> AppConfig:
@@ -389,6 +403,7 @@ def build_runtime_config(
         streamers=[StreamerConfig(name=streamer, url=url)],
         marker=MarkerConfig(
             keywords=keywords if keywords is not None else default_keywords(),
+            gift_value_threshold=gift_value_threshold,
             output_json=str(save_dir / "markers.json"),
             output_csv=str(save_dir / "markers.csv"),
         ),
@@ -425,6 +440,18 @@ def default_keywords() -> list[str]:
     return ["名场面", "来了", "抽奖"]
 
 
+def default_gift_value_threshold() -> int:
+    return 1000
+
+
+def parse_gift_value_threshold(value: object) -> int:
+    try:
+        threshold = int(float(str(value).strip()))
+    except (TypeError, ValueError):
+        return default_gift_value_threshold()
+    return max(0, threshold)
+
+
 def parse_keywords(value: str) -> list[str]:
     keywords: list[str] = []
     seen = set()
@@ -448,9 +475,18 @@ def parse_streamer_entries(raw_entries: object) -> list[dict[str, str]]:
         url = sanitize_douyin_url(str(raw.get("url") or ""))
         save_dir = str(raw.get("saveDir") or "").strip()
         keywords = str(raw.get("keywords") or "，".join(default_keywords())).strip()
+        gift_value_threshold = parse_gift_value_threshold(raw.get("giftValueThreshold"))
         if not name or not url or not save_dir:
             continue
-        entries.append({"name": name, "url": url, "saveDir": save_dir, "keywords": keywords})
+        entries.append(
+            {
+                "name": name,
+                "url": url,
+                "saveDir": save_dir,
+                "keywords": keywords,
+                "giftValueThreshold": str(gift_value_threshold),
+            }
+        )
     return entries
 
 
@@ -537,6 +573,7 @@ def load_ui_settings() -> dict[str, object]:
         "url": str(raw.get("url") or ""),
         "saveDir": str(raw.get("saveDir") or ""),
         "keywords": str(raw.get("keywords") or ""),
+        "giftValueThreshold": parse_gift_value_threshold(raw.get("giftValueThreshold")),
         "streamers": raw.get("streamers") if isinstance(raw.get("streamers"), list) else [],
     }
 
@@ -688,6 +725,7 @@ INDEX_HTML = """<!doctype html>
   <script id="initialSettings" type="application/json">__SETTINGS_JSON__</script>
   <script>
     const defaultKeywords = '名场面，来了，抽奖';
+    const defaultGiftValueThreshold = 1000;
     const initialSettings = JSON.parse(document.getElementById('initialSettings').textContent || '{}');
     const streamerList = document.getElementById('streamerList');
     const statusList = document.getElementById('statusList');
@@ -719,10 +757,11 @@ INDEX_HTML = """<!doctype html>
           name: initialSettings.streamer || '',
           url: initialSettings.url || '',
           saveDir: initialSettings.saveDir || '',
-          keywords: initialSettings.keywords || defaultKeywords
+          keywords: initialSettings.keywords || defaultKeywords,
+          giftValueThreshold: initialSettings.giftValueThreshold || defaultGiftValueThreshold
         }];
       }
-      return [{ name: '', url: '', saveDir: '', keywords: defaultKeywords }];
+      return [{ name: '', url: '', saveDir: '', keywords: defaultKeywords, giftValueThreshold: defaultGiftValueThreshold }];
     }
 
     function addStreamer(values = {}) {
@@ -754,11 +793,16 @@ INDEX_HTML = """<!doctype html>
             <label>高光关键词</label>
             <textarea name="keywords"></textarea>
           </div>
+          <div class="full">
+            <label>大礼物标记阈值</label>
+            <input name="giftValueThreshold" type="number" min="0" step="1" inputmode="numeric">
+          </div>
         </div>`;
       card.querySelector('[name="name"]').value = values.name || values.streamer || '';
       card.querySelector('[name="url"]').value = values.url || '';
       card.querySelector('[name="saveDir"]').value = values.saveDir || '';
       card.querySelector('[name="keywords"]').value = values.keywords || defaultKeywords;
+      card.querySelector('[name="giftValueThreshold"]').value = values.giftValueThreshold || defaultGiftValueThreshold;
       card.querySelector('.remove-btn').addEventListener('click', () => {
         if (streamerList.children.length > 1) card.remove();
       });
@@ -775,7 +819,8 @@ INDEX_HTML = """<!doctype html>
         name: card.querySelector('[name="name"]').value.trim(),
         url: card.querySelector('[name="url"]').value.trim(),
         saveDir: card.querySelector('[name="saveDir"]').value.trim(),
-        keywords: card.querySelector('[name="keywords"]').value.trim()
+        keywords: card.querySelector('[name="keywords"]').value.trim(),
+        giftValueThreshold: card.querySelector('[name="giftValueThreshold"]').value.trim() || defaultGiftValueThreshold
       })).filter(item => item.name && item.url && item.saveDir);
     }
 
