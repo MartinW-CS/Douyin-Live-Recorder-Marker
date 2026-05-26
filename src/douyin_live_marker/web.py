@@ -122,11 +122,12 @@ async def start(request: web.Request) -> web.Response:
             },
             status=400,
         )
-    if not re.fullmatch(r"[0-9]{8,20}", room):
+    if not re.fullmatch(r"[0-9]{8,12}", room):
         return web.json_response(
             {
                 "ok": False,
                 "error": "could not resolve a dycast room number from the Douyin URL",
+                "detail": "dycast needs the short room number used by live.douyin.com, not the long reflow room_id",
             },
             status=400,
         )
@@ -250,37 +251,62 @@ def extract_douyin_room(url: str) -> str:
     direct = re.search(r"live\.douyin\.com/([0-9]{8,12})", text)
     if direct:
         return direct.group(1)
-    reflow = re.search(r"/douyin/webcast/reflow/([0-9]{8,20})", text)
+    reflow = re.search(r"/douyin/webcast/reflow/[0-9]{8,20}", text)
     if reflow:
-        return reflow.group(1)
-    if re.fullmatch(r"[0-9]{8,20}", text):
+        body = fetch_douyin_page(text)[1]
+        web_rid = extract_web_rid(body)
+        if web_rid:
+            return web_rid
+        raise ValueError("reflow link did not expose a live.douyin.com webRid")
+    if re.fullmatch(r"[0-9]{8,12}", text):
         return text
     if "live.douyin.com/" in text:
         return text.rstrip("/").split("/")[-1].split("?")[0]
     if "v.douyin.com/" in text:
-        request = Request(
-            text,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0 Safari/537.36"
-                )
-            },
-        )
-        context = ssl._create_unverified_context()
-        try:
-            with urlopen(request, timeout=10, context=context) as response:
-                final_url = response.geturl()
-        except HTTPError as exc:
-            final_url = exc.url
+        final_url, body = fetch_douyin_page(text)
         final = re.search(r"live\.douyin\.com/([0-9]{8,12})", final_url)
         if final:
             return final.group(1)
-        final_reflow = re.search(r"/douyin/webcast/reflow/([0-9]{8,20})", final_url)
-        if final_reflow:
-            return final_reflow.group(1)
-        return final_url.rstrip("/").split("/")[-1].split("?")[0]
+        web_rid = extract_web_rid(body)
+        if web_rid:
+            return web_rid
+        raise ValueError(f"could not find live.douyin.com webRid in redirected page: {final_url}")
     return text
+
+
+def fetch_douyin_page(url: str) -> tuple[str, str]:
+    request = Request(
+        url,
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0 Safari/537.36"
+            )
+        },
+    )
+    context = ssl._create_unverified_context()
+    try:
+        with urlopen(request, timeout=10, context=context) as response:
+            final_url = response.geturl()
+            body = response.read().decode("utf-8", errors="replace")
+    except HTTPError as exc:
+        final_url = exc.url
+        body = exc.read().decode("utf-8", errors="replace")
+    return final_url, body
+
+
+def extract_web_rid(text: str) -> str | None:
+    decoded = html.unescape(text)
+    patterns = (
+        r'webRid\\?":\\?"([0-9]{8,12})',
+        r'web_rid\\?":\\?"([0-9]{8,12})',
+        r'web_rid=([0-9]{8,12})',
+    )
+    for pattern in patterns:
+        match = re.search(pattern, decoded)
+        if match:
+            return match.group(1)
+    return None
 
 
 def load_ui_settings() -> dict[str, str]:

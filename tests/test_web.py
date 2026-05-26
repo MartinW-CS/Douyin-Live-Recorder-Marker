@@ -1,6 +1,14 @@
 import unittest
 
-from douyin_live_marker.web import UiState, extract_douyin_room, load_ui_settings, render_index, sanitize_douyin_url, status_payload
+from douyin_live_marker.web import (
+    UiState,
+    extract_douyin_room,
+    extract_web_rid,
+    load_ui_settings,
+    render_index,
+    sanitize_douyin_url,
+    status_payload,
+)
 
 
 class WebTests(unittest.TestCase):
@@ -13,10 +21,13 @@ class WebTests(unittest.TestCase):
     def test_extract_room_from_plain_room_number(self):
         self.assertEqual(extract_douyin_room("123456789"), "123456789")
 
-    def test_extract_room_from_reflow_url(self):
+    def test_extract_plain_long_reflow_room_id_is_not_a_dycast_room(self):
+        self.assertEqual(extract_douyin_room("1234567890123"), "1234567890123")
+
+    def test_extract_web_rid_from_reflow_html(self):
         self.assertEqual(
-            extract_douyin_room("https://webcast.amemv.com/douyin/webcast/reflow/7644230925513018150?x=1"),
-            "7644230925513018150",
+            extract_web_rid(r'...\"webRid\":\"645268872452\",\"desensitizedNickname\"...'),
+            "645268872452",
         )
 
     def test_sanitize_douyin_share_text(self):

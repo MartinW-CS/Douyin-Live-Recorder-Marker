@@ -104,10 +104,10 @@ http://127.0.0.1:8787/
 页面里填写：
 
 - 主播名字
-- 抖音直播 URL。推荐使用 `https://live.douyin.com/数字房间号` 这种直播间链接；短链接如果已失效或无法解析，会提示错误。
+- 抖音直播 URL。推荐使用 `https://live.douyin.com/数字房间号` 这种直播间链接；短链接如果已失效、只跳到抖音首页，或无法解析出 dycast 需要的短房间号，会提示错误。
 - 保存到电脑的位置
 
-点击“启动录制”后，后端会启动 biliup、dycast 和高光标记器。页面会自动打开带参数的 dycast，不需要再手动输入 dycast 的房间号和转发地址。dycast 只接受房间号，本项目会尝试把 `https://live.douyin.com/...` 或 `https://v.douyin.com/...` 解析成房间号。
+点击“启动录制”后，后端会启动 biliup、dycast 和高光标记器。页面会自动打开带参数的 dycast，不需要再手动输入 dycast 的房间号和转发地址。dycast 只接受 `live.douyin.com` 使用的短房间号；抖音分享页里的 `reflow` 长 `room_id` 不能直接给 dycast，本项目会尝试从分享页里提取 `webRid` 后再传给 dycast。
 
 页面会记住上一次成功点击“启动录制”时填写的主播名字、直播 URL 和保存位置。第一次打开且没有历史记录时，输入框为空。
 
