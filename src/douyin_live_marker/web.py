@@ -11,6 +11,7 @@ import html
 import json
 import re
 import ssl
+import sys
 
 from aiohttp import web
 
@@ -135,7 +136,8 @@ async def start(request: web.Request) -> web.Response:
         "http://127.0.0.1:5173/"
         f"?auto=1&room={quote(room)}&relay={quote(relay_url)}"
     )
-    config = build_runtime_config(streamer, url, save_path, dycast_dir)
+    recording_url = f"https://live.douyin.com/{room}"
+    config = build_runtime_config(streamer, recording_url, save_path, dycast_dir)
     options = PipelineOptions(
         streamer=streamer,
         save_dir=str(save_path),
@@ -186,8 +188,8 @@ async def mark_recording_when_ready(state: UiState) -> None:
             if state.task is None or state.task.done():
                 return
             dycast_ready = await can_connect("127.0.0.1", 5173)
-            biliup_ready = await can_connect("127.0.0.1", 19159)
-            if dycast_ready and biliup_ready:
+            recorder_running = state.task is not None and not state.task.done()
+            if dycast_ready and recorder_running:
                 state.status = "recording"
                 state.message = "Recording pipeline is running"
                 return
@@ -220,8 +222,17 @@ def build_runtime_config(streamer: str, url: str, save_dir: Path, dycast_dir: Pa
         ),
         biliup=BiliupConfig(
             enabled=True,
-            command=".venv/bin/biliup",
-            args=["server", "--bind", "127.0.0.1", "--port", "19159"],
+            command=sys.executable,
+            args=[
+                "-m",
+                "douyin_live_marker.biliup_recorder",
+                "--streamer",
+                streamer,
+                "--url",
+                url,
+                "--output-dir",
+                str(save_dir / "recordings"),
+            ],
             config_path=str(save_dir / "biliup.config.toml"),
             output_dir=str(save_dir / "recordings"),
         ),

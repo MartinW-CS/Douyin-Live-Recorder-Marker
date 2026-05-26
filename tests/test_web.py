@@ -1,7 +1,9 @@
+from pathlib import Path
 import unittest
 
 from douyin_live_marker.web import (
     UiState,
+    build_runtime_config,
     extract_douyin_room,
     extract_web_rid,
     load_ui_settings,
@@ -9,6 +11,7 @@ from douyin_live_marker.web import (
     sanitize_douyin_url,
     status_payload,
 )
+from douyin_live_marker.biliup_recorder import safe_filename
 
 
 class WebTests(unittest.TestCase):
@@ -29,6 +32,15 @@ class WebTests(unittest.TestCase):
             extract_web_rid(r'...\"webRid\":\"645268872452\",\"desensitizedNickname\"...'),
             "645268872452",
         )
+
+    def test_runtime_config_uses_biliup_recorder_module(self):
+        config = build_runtime_config("demo", "https://live.douyin.com/123456789", Path("/tmp/out"), Path("/tmp/dycast"))
+
+        self.assertIn("douyin_live_marker.biliup_recorder", config.biliup.args)
+        self.assertIn("/tmp/out/recordings", config.biliup.args)
+
+    def test_recorder_safe_filename_removes_path_separators(self):
+        self.assertEqual(safe_filename('主播/标题:测试?'), "主播_标题_测试_")
 
     def test_sanitize_douyin_share_text(self):
         self.assertEqual(

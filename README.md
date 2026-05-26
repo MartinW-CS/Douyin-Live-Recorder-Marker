@@ -109,6 +109,8 @@ http://127.0.0.1:8787/
 
 点击“启动录制”后，后端会启动 biliup、dycast 和高光标记器。页面会自动打开带参数的 dycast，不需要再手动输入 dycast 的房间号和转发地址。dycast 只接受 `live.douyin.com` 使用的短房间号；抖音分享页里的 `reflow` 长 `room_id` 不能直接给 dycast，本项目会尝试从分享页里提取 `webRid` 后再传给 dycast。
 
+视频文件会写入你选择目录下的 `recordings/` 文件夹。`events.jsonl`、`markers.json` 和 `markers.csv` 只表示弹幕/礼物采集与标记器在运行，不代表视频已经录制成功。
+
 页面会记住上一次成功点击“启动录制”时填写的主播名字、直播 URL 和保存位置。第一次打开且没有历史记录时，输入框为空。
 
 页面状态说明：
