@@ -59,14 +59,7 @@ async def index(request: web.Request) -> web.Response:
 
 async def status(request: web.Request) -> web.Response:
     state: UiState = request.app["state"]
-    return web.json_response(
-        {
-            "status": state.status,
-            "message": state.message,
-            "dycastUrl": state.dycast_url,
-            "running": state.task is not None and not state.task.done(),
-        }
-    )
+    return web.json_response(status_payload(state))
 
 
 async def choose_dir(request: web.Request) -> web.Response:
@@ -122,7 +115,7 @@ async def start(request: web.Request) -> web.Response:
         streamer=streamer,
         save_dir=str(save_path),
     )
-    state.status = "running"
+    state.status = "starting"
     state.message = "Starting pipeline"
     state.config = config
     state.options = options
@@ -144,6 +137,8 @@ async def stop(request: web.Request) -> web.Response:
 
 async def run_pipeline_with_state(state: UiState, config: AppConfig, options: PipelineOptions) -> None:
     try:
+        state.status = "recording"
+        state.message = "Recording pipeline is running"
         await run_pipeline(config, options)
     except asyncio.CancelledError:
         state.status = "stopped"
@@ -213,6 +208,36 @@ def extract_douyin_room(url: str) -> str:
     return text
 
 
+def status_payload(state: UiState) -> dict[str, object]:
+    running = state.task is not None and not state.task.done()
+    label_map = {
+        "idle": "未启动",
+        "starting": "启动中",
+        "recording": "录制中",
+        "running": "录制中",
+        "stopped": "已停止",
+        "error": "出错",
+    }
+    detail_map = {
+        "idle": "还没有启动录制。填写信息后点击“启动录制”。",
+        "starting": "正在启动 biliup、dycast 和高光标记器。",
+        "recording": "录制流水线正在运行。请确认右侧 dycast 页面已连接直播间。",
+        "running": "录制流水线正在运行。请确认右侧 dycast 页面已连接直播间。",
+        "stopped": "录制流水线已停止。",
+        "error": "启动或运行过程中出现错误。",
+    }
+    label = label_map.get(state.status, state.status)
+    detail = detail_map.get(state.status, state.message)
+    return {
+        "status": state.status,
+        "label": label,
+        "detail": detail,
+        "message": state.message,
+        "dycastUrl": state.dycast_url,
+        "running": running,
+    }
+
+
 INDEX_HTML = """<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -235,7 +260,14 @@ INDEX_HTML = """<!doctype html>
     .path-row input { flex: 1; }
     .path-row button { flex-shrink: 0; }
     .actions { margin-top: 18px; }
-    .status { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; background: #101820; color: #d7f8e3; padding: 12px; border-radius: 6px; min-height: 46px; }
+    .status { background: #101820; color: #d7f8e3; padding: 12px; border-radius: 6px; min-height: 74px; }
+    .status-title { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+    .status-dot { width: 9px; height: 9px; border-radius: 999px; background: #9aa7b1; display: inline-block; }
+    .status-dot.recording { background: #2fb344; }
+    .status-dot.starting { background: #f59f00; }
+    .status-dot.stopped { background: #9aa7b1; }
+    .status-dot.error { background: #e03131; }
+    .status-detail { margin-top: 8px; font-size: 13px; line-height: 1.45; color: #c8d8ce; }
     iframe { width: 100%; height: 680px; border: 1px solid #d7dde4; border-radius: 8px; background: #fff; }
     .hint { font-size: 13px; color: #64748b; line-height: 1.5; }
   </style>
@@ -259,7 +291,10 @@ INDEX_HTML = """<!doctype html>
           <button class="secondary" id="stopBtn" type="button">停止</button>
         </div>
         <p class="hint">启动后会自动运行 biliup、dycast 和高光标记器。dycast 页面会自动带入房间和转发地址。</p>
-        <div class="status" id="status">Ready</div>
+        <div class="status" id="status">
+          <div class="status-title"><span class="status-dot" id="statusDot"></span><span id="statusLabel">未启动</span></div>
+          <div class="status-detail" id="statusDetail">还没有启动录制。填写信息后点击“启动录制”。</div>
+        </div>
       </form>
       <section class="panel">
         <iframe id="dycastFrame" title="dycast"></iframe>
@@ -269,23 +304,31 @@ INDEX_HTML = """<!doctype html>
   <script>
     const form = document.getElementById('startForm');
     const statusEl = document.getElementById('status');
+    const statusDot = document.getElementById('statusDot');
+    const statusLabel = document.getElementById('statusLabel');
+    const statusDetail = document.getElementById('statusDetail');
     const frame = document.getElementById('dycastFrame');
     const saveDirInput = document.getElementById('saveDir');
+    function renderStatus(status, label, detail) {
+      statusDot.className = `status-dot ${status || ''}`;
+      statusLabel.textContent = label || '未知';
+      statusDetail.textContent = detail || '';
+    }
     document.getElementById('chooseDirBtn').addEventListener('click', async () => {
-      statusEl.textContent = 'Opening folder picker...';
+      renderStatus('starting', '选择保存位置', '正在打开系统文件夹选择窗口。');
       const res = await fetch('/api/choose-dir', { method: 'POST' });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        statusEl.textContent = json.error || 'Folder selection cancelled';
+        renderStatus('idle', '未启动', json.error || '已取消选择保存位置。');
         return;
       }
       saveDirInput.value = json.path;
-      statusEl.textContent = 'Folder selected';
+      renderStatus('idle', '保存位置已选择', json.path);
     });
     form.addEventListener('submit', async ev => {
       ev.preventDefault();
       const data = Object.fromEntries(new FormData(form).entries());
-      statusEl.textContent = 'Starting...';
+      renderStatus('starting', '启动中', '正在启动 biliup、dycast 和高光标记器。');
       const res = await fetch('/api/start', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -293,20 +336,20 @@ INDEX_HTML = """<!doctype html>
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        statusEl.textContent = json.error || 'Start failed';
+        renderStatus('error', '出错', json.error || '启动失败。');
         return;
       }
       frame.src = json.dycastUrl;
-      statusEl.textContent = 'Running';
+      renderStatus('recording', '录制中', '录制流水线已启动。请确认右侧 dycast 页面已连接直播间。');
     });
     document.getElementById('stopBtn').addEventListener('click', async () => {
       await fetch('/api/stop', { method: 'POST' });
-      statusEl.textContent = 'Stopped';
+      renderStatus('stopped', '已停止', '录制流水线已停止。');
     });
     setInterval(async () => {
       const res = await fetch('/api/status');
       const json = await res.json();
-      statusEl.textContent = `${json.status}: ${json.message}`;
+      renderStatus(json.status, json.label, json.detail || json.message);
     }, 1500);
   </script>
 </body>
