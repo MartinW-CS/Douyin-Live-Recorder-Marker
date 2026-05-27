@@ -183,7 +183,7 @@ async def start(request: web.Request) -> web.Response:
         )
     dycast_url = (
         "http://127.0.0.1:5173/"
-        f"?auto=1&room={quote(room)}&relay={quote(relay_url)}&relayDelay=6000"
+        f"?auto=1&room={quote(room)}&relay={quote(relay_url)}&relayDelay=500&roomDelay=1500&connectTimeout=20000"
     )
     recording_url = f"https://live.douyin.com/{room}"
     config = build_runtime_config(streamer, recording_url, save_path, dycast_dir, keywords, gift_value_threshold)
@@ -323,7 +323,7 @@ async def run_auto_job(state: UiState, job: AutoJob) -> None:
                 job.room_url = room_url
                 job.dycast_url = (
                     "http://127.0.0.1:5173/"
-                    f"?auto=1&room={quote(room)}&relay={quote(f'ws://127.0.0.1:{job.relay_port}')}&relayDelay=6000"
+                    f"?auto=1&room={quote(room)}&relay={quote(f'ws://127.0.0.1:{job.relay_port}')}&relayDelay=500&roomDelay=1500&connectTimeout=20000"
                 )
                 config = build_runtime_config(
                     job.name,
@@ -838,6 +838,7 @@ INDEX_HTML = """<!doctype html>
               </div>
               <div class="job-message">${escapeHtml(body.detail || body.message || '')}</div>
               ${body.dycastUrl ? `<iframe src="${escapeAttr(body.dycastUrl)}" title="dycast"></iframe>` : ''}
+              ${body.dycastUrl ? '<div class="job-message">右侧 dycast 如果一直显示正在连接，只代表弹幕/礼物未连接；视频是否录制成功看保存目录里的 recordings 文件。</div>' : ''}
             </div>`;
           return;
         }
@@ -855,7 +856,8 @@ INDEX_HTML = """<!doctype html>
           </div>
           <div class="job-message">${escapeHtml(job.message || '')}</div>
           ${job.lastError ? `<div class="job-message">最近信息：${escapeHtml(job.lastError)}</div>` : ''}
-          ${job.dycastUrl ? `<iframe src="${escapeAttr(job.dycastUrl)}" title="${escapeAttr(job.name)} dycast"></iframe>` : ''}`;
+          ${job.dycastUrl ? `<iframe src="${escapeAttr(job.dycastUrl)}" title="${escapeAttr(job.name)} dycast"></iframe>` : ''}
+          ${job.dycastUrl ? '<div class="job-message">dycast 只负责弹幕/礼物；连接失败不会停止视频录制。</div>' : ''}`;
         statusList.appendChild(item);
       }
     }

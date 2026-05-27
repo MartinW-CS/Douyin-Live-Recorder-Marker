@@ -13,7 +13,7 @@ def ensure_dycast_auto_connect(dycast_dir: str | Path) -> bool:
 
     text = view_path.read_text(encoding="utf-8")
     if PATCH_MARKER in text:
-        return False
+        text = remove_existing_patch(text)
 
     text = text.replace(
         "import { ref, useTemplateRef } from 'vue';",
@@ -34,10 +34,21 @@ onMounted(async () => {{
   if (room) roomNum.value = room;
   if (relay) relayUrl.value = relay;
   await nextTick();
-  if (room) connectLive();
   if (relay) {{
-    const relayDelay = Number(params.get('relayDelay') || '2500');
+    const relayDelay = Number(params.get('relayDelay') || '500');
     window.setTimeout(() => relayCast(), relayDelay);
+  }}
+  if (room) {{
+    const roomDelay = Number(params.get('roomDelay') || '1500');
+    window.setTimeout(() => connectLive(), roomDelay);
+    const connectTimeout = Number(params.get('connectTimeout') || '20000');
+    window.setTimeout(() => {{
+      if (connectStatus.value === 0) {{
+        addConsoleMessage('弹幕连接超时：视频录制可能仍在进行，但弹幕/礼物标记暂时不可用');
+        SkMessage.warning('弹幕连接超时，视频录制不受影响');
+        setRoomInputStatus(false);
+      }}
+    }}, connectTimeout);
   }}
 }});
 """.format(marker=PATCH_MARKER)
@@ -46,3 +57,17 @@ onMounted(async () => {{
     text = text.replace(insert_after, insert_after + patch)
     view_path.write_text(text, encoding="utf-8")
     return True
+
+
+def remove_existing_patch(text: str) -> str:
+    start = text.find(PATCH_MARKER)
+    if start < 0:
+        return text
+    mounted = text.find("onMounted(async () => {", start)
+    if mounted < 0:
+        return text
+    end_marker = "});"
+    end = text.find(end_marker, mounted)
+    if end < 0:
+        return text
+    return text[:start].rstrip() + "\n" + text[end + len(end_marker) :].lstrip()
