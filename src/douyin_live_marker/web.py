@@ -733,6 +733,7 @@ INDEX_HTML = """<!doctype html>
     const summaryText = document.getElementById('summaryText');
     const summaryDot = document.getElementById('summaryDot');
     let activePathInput = null;
+    let lastStatusRenderKey = '';
 
     function requestJson(method, url, data) {
       return new Promise((resolve, reject) => {
@@ -828,6 +829,9 @@ INDEX_HTML = """<!doctype html>
     function renderStatus(body) {
       summaryText.textContent = body.autoRunning ? '自动录制运行中' : (body.label || '未启动');
       summaryDot.className = `dot ${body.autoRunning ? 'recording' : body.status || ''}`;
+      const renderKey = statusRenderKey(body);
+      if (renderKey === lastStatusRenderKey) return;
+      lastStatusRenderKey = renderKey;
       if (!body.jobs || !body.jobs.length) {
         if (body.running || ['starting', 'recording', 'error', 'stopped'].includes(body.status)) {
           statusList.innerHTML = `
@@ -860,6 +864,28 @@ INDEX_HTML = """<!doctype html>
           ${job.dycastUrl ? '<div class="job-message">dycast 只负责弹幕/礼物；连接失败不会停止视频录制。</div>' : ''}`;
         statusList.appendChild(item);
       }
+    }
+
+    function statusRenderKey(body) {
+      const jobs = Array.isArray(body.jobs) ? body.jobs.map(job => ({
+        id: job.id,
+        name: job.name,
+        status: job.status,
+        label: job.label,
+        message: job.message,
+        dycastUrl: job.dycastUrl,
+        lastError: job.lastError || ''
+      })) : [];
+      return JSON.stringify({
+        status: body.status,
+        label: body.label,
+        detail: body.detail,
+        message: body.message,
+        running: body.running,
+        autoRunning: body.autoRunning,
+        dycastUrl: body.dycastUrl,
+        jobs
+      });
     }
 
     function escapeHtml(value) {
@@ -899,6 +925,7 @@ INDEX_HTML = """<!doctype html>
     });
     document.getElementById('stopBtn').addEventListener('click', async () => {
       await requestJson('POST', '/api/stop');
+      lastStatusRenderKey = '';
       await pollStatus();
     });
 
